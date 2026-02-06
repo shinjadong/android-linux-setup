@@ -431,10 +431,60 @@ else
 fi
 
 # ============================================================
-# Step 11: chroot 쉘 환경 + CLAUDE.md
+# Step 11: Fake ADB wrapper (on-device automation)
 # ============================================================
 echo ""
-info "Step 11: chroot 쉘 환경 설정..."
+info "Step 11: ADB wrapper 설치 (디바이스 자체 자동화용)..."
+
+su -c "cat > $LINUX_ROOT/usr/local/bin/adb << 'ADBWRAP'
+#!/bin/bash
+# Fake ADB wrapper — translates adb shell to nsenter for on-device use
+ARGS=(\"\$@\"); IDX=0
+[[ \"\${ARGS[0]}\" == \"-s\" ]] && IDX=2
+CMD=\"\${ARGS[\$IDX]}\"
+case \"\$CMD\" in
+    devices) echo \"List of devices attached\"; echo \"\$(nsenter -t 1 -m -- getprop ro.serialno 2>/dev/null || echo localhost)\tdevice\" ;;
+    get-state) echo \"device\" ;;
+    shell) nsenter -t 1 -m -- /system/bin/sh -c \"\${ARGS[*]:\$((IDX+1))}\" ;;
+    forward) echo \"forward: not fully supported in on-device mode\" >&2 ;;
+    *) echo \"adb wrapper: unsupported '\$CMD'\" >&2; exit 1 ;;
+esac
+ADBWRAP
+chmod 755 $LINUX_ROOT/usr/local/bin/adb"
+ok "ADB wrapper 설치"
+
+# ============================================================
+# Step 12: code-server (브라우저 VS Code)
+# ============================================================
+echo ""
+info "Step 12: code-server 설치..."
+
+CODE_SERVER_CHECK=$(su -c "chroot $LINUX_ROOT /bin/bash -lc 'which code-server 2>/dev/null || echo NONE'")
+if [ "$CODE_SERVER_CHECK" != "NONE" ]; then
+  ok "code-server 이미 설치됨"
+else
+  su -c "chroot $LINUX_ROOT /bin/bash -lc 'curl -fsSL https://code-server.dev/install.sh | sh'" 2>&1 | tail -5
+  ok "code-server 설치 완료"
+fi
+
+# code-server 설정
+su -c "mkdir -p $LINUX_ROOT/root/.config/code-server"
+su -c "cat > $LINUX_ROOT/root/.config/code-server/config.yaml << 'CSEOF'
+bind-addr: 0.0.0.0:8080
+auth: password
+password: CS_PASSWORD_PLACEHOLDER
+cert: false
+CSEOF"
+su -c "sed -i 's/CS_PASSWORD_PLACEHOLDER/$SSH_PASSWORD/g' $LINUX_ROOT/root/.config/code-server/config.yaml"
+ok "code-server 설정 (포트 8080, 비밀번호: $SSH_PASSWORD)"
+
+echo -e "  ${CYAN}브라우저에서 http://localhost:8080 접속${NC}"
+
+# ============================================================
+# Step 13: chroot 쉘 환경 + CLAUDE.md
+# ============================================================
+echo ""
+info "Step 13: chroot 쉘 환경 설정..."
 
 # chroot .bashrc 설치
 su -c "cat > $LINUX_ROOT/root/.bashrc << 'CHROOTBASHRC'
@@ -506,10 +556,10 @@ su -c "ln -sf /mnt/sdcard/Documents/Brain $LINUX_ROOT/root/vault" 2>/dev/null
 ok "~/vault → Obsidian Brain 링크"
 
 # ============================================================
-# Step 12: Termux .bashrc 설정
+# Step 14: Termux .bashrc 설정
 # ============================================================
 echo ""
-info "Step 12: 쉘 바로가기 설정..."
+info "Step 14: 쉘 바로가기 설정..."
 
 # linux 함수가 이미 있으면 스킵
 if grep -q "function linux\|linux()" ~/.bashrc 2>/dev/null; then
@@ -546,13 +596,14 @@ echo -e "${GREEN}═════════════════════
 echo -e "${GREEN}  설치 완료!${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════${NC}"
 echo ""
-echo -e "  ${CYAN}linux${NC}     chroot Linux 쉘 접속"
-echo -e "  ${CYAN}lcc${NC}       chroot에서 Claude Code 바로 실행"
+echo -e "  ${CYAN}linux${NC}       chroot Linux 쉘 접속"
+echo -e "  ${CYAN}lcc${NC}         chroot에서 Claude Code 바로 실행"
 echo -e "  ${CYAN}ssh -p $SSH_PORT root@localhost${NC}"
 echo ""
-echo -e "  SSH 비밀번호: ${YELLOW}$SSH_PASSWORD${NC}"
-echo -e "  chroot 경로: $LINUX_ROOT"
-echo -e "  Node.js:     v$NODE_VERSION"
+echo -e "  SSH 비밀번호:  ${YELLOW}$SSH_PASSWORD${NC}"
+echo -e "  chroot 경로:  $LINUX_ROOT"
+echo -e "  Node.js:      v$NODE_VERSION"
+echo -e "  code-server:  ${CYAN}http://localhost:8080${NC}"
 echo ""
 echo -e "  ${YELLOW}새 터미널에서 'source ~/.bashrc' 또는 재시작 후 사용${NC}"
 echo ""
