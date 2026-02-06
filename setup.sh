@@ -88,7 +88,7 @@ su -c "mkdir -p $LINUX_ROOT/tmp $LINUX_ROOT/run/sshd && chmod 1777 $LINUX_ROOT/t
 
 # /storage 마운트 (Android 공유 스토리지 접근)
 su -c "mkdir -p $LINUX_ROOT/mnt/sdcard"
-su -c "mountpoint -q $LINUX_ROOT/mnt/sdcard || mount --bind /storage/emulated/0 $LINUX_ROOT/mnt/sdcard" 2>/dev/null || true
+su -c "mountpoint -q $LINUX_ROOT/mnt/sdcard || mount --bind /data/media/0 $LINUX_ROOT/mnt/sdcard" 2>/dev/null || true
 
 # DNS
 su -c "echo 'nameserver 8.8.8.8' > $LINUX_ROOT/etc/resolv.conf"
@@ -527,7 +527,7 @@ linux() {
     su -c "mountpoint -q /data/linux/dev || mount --bind /dev /data/linux/dev" 2>/dev/null
     su -c "mountpoint -q /data/linux/dev/pts || mount --bind /dev/pts /data/linux/dev/pts" 2>/dev/null
     su -c "mkdir -p /data/linux/tmp /data/linux/run/sshd /data/linux/mnt/sdcard && chmod 1777 /data/linux/tmp" 2>/dev/null
-    su -c "mountpoint -q /data/linux/mnt/sdcard || mount --bind /storage/emulated/0 /data/linux/mnt/sdcard" 2>/dev/null
+    su -c "mountpoint -q /data/linux/mnt/sdcard || mount --bind /data/media/0 /data/linux/mnt/sdcard" 2>/dev/null
     su -c "chroot /data/linux /usr/sbin/sshd" 2>/dev/null
     sleep 1
   fi
