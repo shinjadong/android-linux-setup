@@ -22,6 +22,10 @@ mountpoint -q $LINUX/sys     || mount --bind /sys $LINUX/sys
 mountpoint -q $LINUX/dev     || mount --bind /dev $LINUX/dev
 mountpoint -q $LINUX/dev/pts || mount --bind /dev/pts $LINUX/dev/pts
 
+# /storage 마운트 (Android 공유 스토리지)
+mkdir -p $LINUX/mnt/sdcard
+mountpoint -q $LINUX/mnt/sdcard || mount --bind /storage/emulated/0 $LINUX/mnt/sdcard 2>/dev/null
+
 # tmp, run
 mkdir -p $LINUX/tmp $LINUX/run/sshd
 chmod 1777 $LINUX/tmp

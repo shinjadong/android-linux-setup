@@ -86,6 +86,10 @@ su -c "mountpoint -q $LINUX_ROOT/dev   || mount --bind /dev $LINUX_ROOT/dev"
 su -c "mountpoint -q $LINUX_ROOT/dev/pts || mount --bind /dev/pts $LINUX_ROOT/dev/pts"
 su -c "mkdir -p $LINUX_ROOT/tmp $LINUX_ROOT/run/sshd && chmod 1777 $LINUX_ROOT/tmp"
 
+# /storage 마운트 (Android 공유 스토리지 접근)
+su -c "mkdir -p $LINUX_ROOT/mnt/sdcard"
+su -c "mountpoint -q $LINUX_ROOT/mnt/sdcard || mount --bind /storage/emulated/0 $LINUX_ROOT/mnt/sdcard" 2>/dev/null || true
+
 # DNS
 su -c "echo 'nameserver 8.8.8.8' > $LINUX_ROOT/etc/resolv.conf"
 su -c "echo 'nameserver 1.1.1.1' >> $LINUX_ROOT/etc/resolv.conf"
@@ -93,9 +97,16 @@ su -c "echo 'nameserver 1.1.1.1' >> $LINUX_ROOT/etc/resolv.conf"
 ok "마운트 완료"
 
 # ============================================================
-# Step 3: chroot 기본 설정
+# Step 3: chroot 기본 설정 + 개발 환경
 # ============================================================
-info "Step 3: chroot 내부 기본 설정..."
+info "Step 3: chroot 내부 기본 설정 + 개발 환경..."
+
+# apt sources.list 확장 (universe/multiverse 포함)
+su -c "cat > $LINUX_ROOT/etc/apt/sources.list << 'SRCEOF'
+deb http://ports.ubuntu.com/ubuntu-ports jammy main restricted universe multiverse
+deb http://ports.ubuntu.com/ubuntu-ports jammy-updates main restricted universe multiverse
+deb http://ports.ubuntu.com/ubuntu-ports jammy-security main restricted universe multiverse
+SRCEOF"
 
 su -c "cat > $LINUX_ROOT/tmp/chroot-base-setup.sh << 'INNEREOF'
 #!/bin/bash
@@ -103,14 +114,44 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export DEBIAN_FRONTEND=noninteractive
 export HOME=/root
 
-# PATH 영구 설정
-echo 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' > /etc/profile.d/fix-path.sh
-chmod +x /etc/profile.d/fix-path.sh
-grep -q 'fix-path' /root/.bashrc 2>/dev/null || echo 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' >> /root/.bashrc
-
-# 기본 패키지 설치
+# 패키지 설치 (기본 + 개발 도구)
 apt-get update -qq 2>/dev/null
-apt-get install -y openssh-server curl ca-certificates git 2>&1 | tail -3
+apt-get install -y \
+  openssh-server curl ca-certificates wget \
+  git ripgrep jq tmux htop \
+  build-essential locales vim nano \
+  2>&1 | tail -5
+
+# Locale 설정 (ko_KR.UTF-8 + en_US.UTF-8)
+sed -i 's/# ko_KR.UTF-8/ko_KR.UTF-8/' /etc/locale.gen
+sed -i 's/# en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen
+locale-gen 2>&1 | tail -3
+update-locale LANG=ko_KR.UTF-8 LC_ALL=ko_KR.UTF-8
+
+# Timezone: Asia/Seoul
+ln -sf /usr/share/zoneinfo/Asia/Seoul /etc/localtime
+echo 'Asia/Seoul' > /etc/timezone
+
+# /etc/environment (비로그인 쉘용)
+cat > /etc/environment << 'ENVEOF'
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+LANG=ko_KR.UTF-8
+LC_ALL=ko_KR.UTF-8
+ENVEOF
+
+# /etc/profile.d/ (로그인 쉘용 — bash -lc 에서도 작동)
+cat > /etc/profile.d/chroot-env.sh << 'PROFEOF'
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LANG=ko_KR.UTF-8
+export LC_ALL=ko_KR.UTF-8
+export HOME=/root
+export EDITOR=vim
+PROFEOF
+chmod 644 /etc/profile.d/chroot-env.sh
+
+# Git 기본 설정
+git config --global init.defaultBranch main
+git config --global core.editor vim
 
 echo 'BASE_SETUP_DONE'
 INNEREOF
@@ -118,9 +159,18 @@ chmod 755 $LINUX_ROOT/tmp/chroot-base-setup.sh"
 
 RESULT=$(su -c "chroot $LINUX_ROOT /bin/bash /tmp/chroot-base-setup.sh 2>&1 | tail -1")
 if [ "$RESULT" = "BASE_SETUP_DONE" ]; then
-  ok "기본 패키지 설치 완료"
+  ok "기본 패키지 + 개발 환경 설치 완료"
 else
-  warn "기본 패키지 설치 중 문제 발생 (계속 진행)"
+  warn "기본 설정 중 문제 발생 (계속 진행)"
+fi
+
+# Git user config (환경변수로 오버라이드 가능)
+GIT_USER="${GIT_USERNAME:-}"
+GIT_EMAIL="${GIT_USEREMAIL:-}"
+if [ -n "$GIT_USER" ]; then
+  su -c "chroot $LINUX_ROOT /bin/bash -lc 'git config --global user.name \"$GIT_USER\"'"
+  su -c "chroot $LINUX_ROOT /bin/bash -lc 'git config --global user.email \"${GIT_EMAIL:-${GIT_USER}@users.noreply.github.com}\"'"
+  ok "Git config: $GIT_USER"
 fi
 
 # ============================================================
@@ -381,10 +431,85 @@ else
 fi
 
 # ============================================================
-# Step 11: Termux .bashrc 설정
+# Step 11: chroot 쉘 환경 + CLAUDE.md
 # ============================================================
 echo ""
-info "Step 11: 쉘 바로가기 설정..."
+info "Step 11: chroot 쉘 환경 설정..."
+
+# chroot .bashrc 설치
+su -c "cat > $LINUX_ROOT/root/.bashrc << 'CHROOTBASHRC'
+# ~/.bashrc — Android Linux Setup (chroot)
+[ -z \"\\\$PS1\" ] && return
+
+# History
+HISTCONTROL=ignoredups:ignorespace
+HISTSIZE=5000
+HISTFILESIZE=10000
+shopt -s histappend
+shopt -s checkwinsize
+shopt -s cdspell 2>/dev/null
+
+# Environment
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export HOME=/root
+export LANG=ko_KR.UTF-8
+export LC_ALL=ko_KR.UTF-8
+export EDITOR=vim
+export TERM=xterm-256color
+
+# Prompt (chroot indicator)
+PS1='\\[\\033[1;36m\\][chroot]\\[\\033[0m\\] \\[\\033[1;32m\\]\\u\\[\\033[0m\\]:\\[\\033[1;34m\\]\\w\\[\\033[0m\\]\\$ '
+
+# Colors
+if [ -x /usr/bin/dircolors ]; then
+    eval \"\\\$(dircolors -b)\"
+    alias ls='ls --color=auto'
+    alias grep='grep --color=auto'
+fi
+
+# Aliases
+alias ll='ls -alFh'
+alias la='ls -A'
+alias l='ls -CF'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias gs='git status'
+alias gl='git log --oneline -20'
+alias gd='git diff'
+alias vault='cd /mnt/sdcard/Documents/Brain'
+alias sdcard='cd /mnt/sdcard'
+alias cc='claude'
+
+# Bash completion
+if [ -f /etc/bash_completion ] && ! shopt -oq posix; then
+    . /etc/bash_completion
+fi
+
+cd /root
+CHROOTBASHRC"
+ok "chroot .bashrc 설치"
+
+# CLAUDE.md + rules 복사 (Termux에서 있으면)
+TERMUX_HOME="/data/data/com.termux/files/home"
+su -c "mkdir -p $LINUX_ROOT/root/.claude/rules"
+if [ -f "$TERMUX_HOME/.claude/CLAUDE.md" ]; then
+  su -c "cp $TERMUX_HOME/.claude/CLAUDE.md $LINUX_ROOT/root/.claude/CLAUDE.md"
+  ok "CLAUDE.md 복사"
+fi
+for f in "$TERMUX_HOME/.claude/rules/"*; do
+  [ -f "$f" ] && su -c "cp $f $LINUX_ROOT/root/.claude/rules/"
+done
+ok "Claude rules 복사"
+
+# Obsidian vault 심볼릭 링크
+su -c "ln -sf /mnt/sdcard/Documents/Brain $LINUX_ROOT/root/vault" 2>/dev/null
+ok "~/vault → Obsidian Brain 링크"
+
+# ============================================================
+# Step 12: Termux .bashrc 설정
+# ============================================================
+echo ""
+info "Step 12: 쉘 바로가기 설정..."
 
 # linux 함수가 이미 있으면 스킵
 if grep -q "function linux\|linux()" ~/.bashrc 2>/dev/null; then
@@ -401,7 +526,8 @@ linux() {
     su -c "mountpoint -q /data/linux/sys || mount --bind /sys /data/linux/sys" 2>/dev/null
     su -c "mountpoint -q /data/linux/dev || mount --bind /dev /data/linux/dev" 2>/dev/null
     su -c "mountpoint -q /data/linux/dev/pts || mount --bind /dev/pts /data/linux/dev/pts" 2>/dev/null
-    su -c "mkdir -p /data/linux/tmp /data/linux/run/sshd && chmod 1777 /data/linux/tmp" 2>/dev/null
+    su -c "mkdir -p /data/linux/tmp /data/linux/run/sshd /data/linux/mnt/sdcard && chmod 1777 /data/linux/tmp" 2>/dev/null
+    su -c "mountpoint -q /data/linux/mnt/sdcard || mount --bind /storage/emulated/0 /data/linux/mnt/sdcard" 2>/dev/null
     su -c "chroot /data/linux /usr/sbin/sshd" 2>/dev/null
     sleep 1
   fi
