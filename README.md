@@ -8,6 +8,7 @@ Termux에서 `setup.sh` 한 번 실행하면:
 - **SSH** 접속 설정 (키 인증 + 비밀번호)
 - 재부팅 후 **자동 시작** (Magisk + Termux:Boot)
 - 배터리 최적화/백그라운드 제한 **자동 해제**
+- **Android 명령어 브릿지** (chroot에서 pm, am, settings 등 사용)
 
 ## 왜 필요한가?
 
@@ -87,6 +88,7 @@ ssh -p 8022 root@localhost
 ├── tmp/                  ← Claude Code가 사용 (✓)
 ├── usr/local/bin/node    ← Node.js 22
 ├── usr/local/bin/claude  ← Claude Code
+├── usr/local/bin/pm,am.. ← Android 명령어 (nsenter)
 └── root/                 ← root 홈
 
 Magisk:
@@ -110,6 +112,7 @@ Termux:
 | Magisk 부팅 스크립트 | `/data/adb/service.d/` | 마운트 + sshd 자동시작 |
 | Termux:Boot 앱 | `com.termux.boot` | GitHub APK 자동 설치 |
 | Termux:API 앱 | `com.termux.api` | GitHub APK 자동 설치 |
+| Android 명령어 브릿지 | chroot `/usr/local/bin/` | nsenter wrapper (pm, am, settings 등) |
 | 배터리/권한 설정 | 시스템 | 배터리 최적화 제외, 백그라운드 허용 |
 
 ## /tmp 문제 해결 (핵심)
@@ -131,6 +134,35 @@ su -c "umount /tmp; mount -t tmpfs -o mode=1777 tmpfs /tmp; chcon u:object_r:app
 
 이 스크립트는 `fix-tmp.sh`로 Magisk service.d에 설치되어 재부팅마다 자동 적용됩니다.
 
+## Android 명령어 브릿지 (nsenter)
+
+chroot는 표준 리눅스 환경이지만, Android API에 직접 접근할 수 없습니다. 이 프로젝트는 `nsenter`를 사용해 chroot에서 Android 명령어를 실행할 수 있는 wrapper 스크립트를 설치합니다.
+
+```bash
+# chroot 안에서 Android 명령어 사용 예시
+pm list packages              # 설치된 앱 목록
+am start -n com.app/.Activity # 앱 실행
+settings get system volume    # 시스템 설정 읽기
+dumpsys battery               # 배터리 상태
+getprop ro.product.model      # 디바이스 정보
+input tap 500 500             # 화면 터치
+```
+
+**원리**: `nsenter -t 1 -m` — PID 1 (Android init)의 마운트 네임스페이스에 진입하여 `/system/bin/` 명령어를 실행합니다.
+
+| wrapper | 설명 |
+|---------|------|
+| `pm` | 패키지 매니저 (앱 설치/삭제/목록) |
+| `am` | 액티비티 매니저 (앱 실행/인텐트) |
+| `settings` | Android 설정 읽기/쓰기 |
+| `dumpsys` | 시스템 서비스 상태 조회 |
+| `cmd` | 시스템 명령 실행 |
+| `getprop` / `setprop` | 시스템 프로퍼티 읽기/쓰기 |
+| `input` | 입력 이벤트 (탭/스와이프/키) |
+| `svc` | 시스템 서비스 제어 (wifi/power 등) |
+| `android` | 일반 Android 명령 실행 |
+| `asu` | Android 쪽 root shell |
+
 ## Termux vs chroot 비교
 
 | 항목 | Termux | chroot (이 프로젝트) |
@@ -140,6 +172,7 @@ su -c "umount /tmp; mount -t tmpfs -o mode=1777 tmpfs /tmp; chcon u:object_r:app
 | ripgrep | ✗ (ENOENT) | ✓ (`apt install`) |
 | apt install | ✗ (pkg 사용) | ✓ |
 | 표준 리눅스 경로 | ✗ | ✓ |
+| Android 명령어 (pm, am) | ✓ (직접) | ✓ (nsenter 브릿지) |
 | 성능 오버헤드 | 없음 | 거의 없음 (커널 공유) |
 | systemd | ✗ | ✗ (Android init 점유) |
 

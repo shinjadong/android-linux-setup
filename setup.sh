@@ -333,10 +333,58 @@ done
 ok "Standby bucket ACTIVE 설정"
 
 # ============================================================
-# Step 10: Termux .bashrc 설정
+# Step 10: Android 명령어 브릿지 (nsenter wrappers)
 # ============================================================
 echo ""
-info "Step 10: 쉘 바로가기 설정..."
+info "Step 10: chroot에서 Android 명령어 사용 설정..."
+
+su -c "cat > $LINUX_ROOT/tmp/install-nsenter-wrappers.sh << 'INNEREOF'
+#!/bin/bash
+# chroot 안에서 Android 명령어를 쓸 수 있게 nsenter wrapper 설치
+# nsenter -t 1 -m: PID 1 (Android init)의 마운트 네임스페이스로 진입
+
+CMDS="pm am settings dumpsys cmd getprop setprop input svc"
+
+for cmd in \$CMDS; do
+  cat > /usr/local/bin/\$cmd << WRAPEOF
+#!/bin/bash
+nsenter -t 1 -m -- /system/bin/\$cmd "\\\$@"
+WRAPEOF
+  chmod 755 /usr/local/bin/\$cmd
+done
+
+# android — 일반 Android 명령 실행
+cat > /usr/local/bin/android << 'WRAPEOF'
+#!/bin/bash
+# Android 명령 실행 (chroot에서 Android 네임스페이스로 진입)
+nsenter -t 1 -m -- "$@"
+WRAPEOF
+chmod 755 /usr/local/bin/android
+
+# asu — Android 쪽 root shell
+cat > /usr/local/bin/asu << 'WRAPEOF'
+#!/bin/bash
+# Android su — chroot에서 Android 쪽 root 명령 실행
+nsenter -t 1 -m -- /system/bin/sh -c "$*"
+WRAPEOF
+chmod 755 /usr/local/bin/asu
+
+echo NSENTER_DONE
+INNEREOF
+chmod 755 $LINUX_ROOT/tmp/install-nsenter-wrappers.sh"
+
+NSENTER_RESULT=$(su -c "chroot $LINUX_ROOT /bin/bash /tmp/install-nsenter-wrappers.sh 2>&1 | tail -1")
+if [ "$NSENTER_RESULT" = "NSENTER_DONE" ]; then
+  ok "Android 명령어 브릿지 설치 (pm, am, settings, dumpsys 등)"
+else
+  warn "nsenter wrapper 설치 중 문제 발생 (계속 진행)"
+fi
+
+# ============================================================
+# Step 11: Termux .bashrc 설정
+# ============================================================
+echo ""
+info "Step 11: 쉘 바로가기 설정..."
 
 # linux 함수가 이미 있으면 스킵
 if grep -q "function linux\|linux()" ~/.bashrc 2>/dev/null; then
