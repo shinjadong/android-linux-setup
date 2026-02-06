@@ -42,4 +42,12 @@ else
   log 'sshd already running'
 fi
 
+# code-server 시작 (이미 떠있으면 스킵)
+if ! chroot $LINUX /bin/bash -c 'export PATH=/usr/local/bin:/usr/bin:/bin; pgrep -f code-server' >/dev/null 2>&1; then
+  chroot $LINUX /bin/bash -lc 'nohup code-server --bind-addr 0.0.0.0:8080 > /tmp/code-server.log 2>&1 &'
+  log 'code-server started (port 8080)'
+else
+  log 'code-server already running'
+fi
+
 log 'Boot complete'
