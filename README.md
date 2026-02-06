@@ -9,6 +9,10 @@ Termux에서 `setup.sh` 한 번 실행하면:
 - 재부팅 후 **자동 시작** (Magisk + Termux:Boot)
 - 배터리 최적화/백그라운드 제한 **자동 해제**
 - **Android 명령어 브릿지** (chroot에서 pm, am, settings 등 사용)
+- **개발 도구** (git, ripgrep, jq, tmux, htop, build-essential)
+- **한국어 로케일** (ko_KR.UTF-8) + **Asia/Seoul** 타임존
+- **/storage 마운트** (Obsidian vault 등 공유 스토리지 접근)
+- **CLAUDE.md + rules** 자동 복사
 
 ## 왜 필요한가?
 
@@ -46,6 +50,9 @@ bash setup.sh
 ```bash
 # SSH 비밀번호 변경 (기본: hi1120)
 LINUX_PASSWORD=mypassword bash setup.sh
+
+# Git 사용자 설정
+GIT_USERNAME=myname GIT_USEREMAIL=me@example.com bash setup.sh
 ```
 
 ## 사용법
@@ -89,6 +96,9 @@ ssh -p 8022 root@localhost
 ├── usr/local/bin/node    ← Node.js 22
 ├── usr/local/bin/claude  ← Claude Code
 ├── usr/local/bin/pm,am.. ← Android 명령어 (nsenter)
+├── mnt/sdcard/           ← Android 공유 스토리지
+├── root/.claude/         ← CLAUDE.md + rules
+├── root/vault → Brain    ← Obsidian vault 심링크
 └── root/                 ← root 홈
 
 Magisk:
@@ -113,6 +123,11 @@ Termux:
 | Termux:Boot 앱 | `com.termux.boot` | GitHub APK 자동 설치 |
 | Termux:API 앱 | `com.termux.api` | GitHub APK 자동 설치 |
 | Android 명령어 브릿지 | chroot `/usr/local/bin/` | nsenter wrapper (pm, am, settings 등) |
+| 개발 도구 | chroot apt | git, ripgrep, jq, tmux, htop, build-essential |
+| 로케일/타임존 | chroot 시스템 | ko_KR.UTF-8, Asia/Seoul |
+| /storage 마운트 | chroot `/mnt/sdcard` | Android 공유 스토리지 바인드 마운트 |
+| CLAUDE.md + rules | chroot `~/.claude/` | Termux에서 자동 복사 |
+| Obsidian vault | chroot `~/vault` | /mnt/sdcard/Documents/Brain 심링크 |
 | 배터리/권한 설정 | 시스템 | 배터리 최적화 제외, 백그라운드 허용 |
 
 ## /tmp 문제 해결 (핵심)
