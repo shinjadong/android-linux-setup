@@ -149,9 +149,9 @@ export EDITOR=vim
 PROFEOF
 chmod 644 /etc/profile.d/chroot-env.sh
 
-# Git 기본 설정
-git config --global init.defaultBranch main
-git config --global core.editor vim
+# Git 기본 설정 (HOME이 /root가 아닐 수 있으므로 경로 명시)
+git config --file /root/.gitconfig init.defaultBranch main
+git config --file /root/.gitconfig core.editor vim
 
 echo 'BASE_SETUP_DONE'
 INNEREOF
@@ -168,8 +168,8 @@ fi
 GIT_USER="${GIT_USERNAME:-}"
 GIT_EMAIL="${GIT_USEREMAIL:-}"
 if [ -n "$GIT_USER" ]; then
-  su -c "chroot $LINUX_ROOT /bin/bash -lc 'git config --global user.name \"$GIT_USER\"'"
-  su -c "chroot $LINUX_ROOT /bin/bash -lc 'git config --global user.email \"${GIT_EMAIL:-${GIT_USER}@users.noreply.github.com}\"'"
+  su -c "chroot $LINUX_ROOT /bin/bash -lc 'git config --file /root/.gitconfig user.name \"$GIT_USER\"'"
+  su -c "chroot $LINUX_ROOT /bin/bash -lc 'git config --file /root/.gitconfig user.email \"${GIT_EMAIL:-${GIT_USER}@users.noreply.github.com}\"'"
   ok "Git config: $GIT_USER"
 fi
 
