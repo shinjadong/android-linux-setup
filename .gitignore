@@ -1,0 +1,3 @@
+*.apk
+*.log
+node_modules/
