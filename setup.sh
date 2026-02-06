@@ -478,13 +478,72 @@ CSEOF"
 su -c "sed -i 's/CS_PASSWORD_PLACEHOLDER/$SSH_PASSWORD/g' $LINUX_ROOT/root/.config/code-server/config.yaml"
 ok "code-server 설정 (포트 8080, 비밀번호: $SSH_PASSWORD)"
 
+# code-server 익스텐션 설치
+info "code-server 익스텐션 설치 중..."
+su -c "chroot $LINUX_ROOT /bin/bash -lc '
+code-server --install-extension ms-python.python 2>/dev/null
+code-server --install-extension dbaeumer.vscode-eslint 2>/dev/null
+code-server --install-extension esbenp.prettier-vscode 2>/dev/null
+code-server --install-extension eamodio.gitlens 2>/dev/null
+code-server --install-extension PKief.material-icon-theme 2>/dev/null
+code-server --install-extension dracula-theme.theme-dracula 2>/dev/null
+code-server --install-extension redhat.vscode-yaml 2>/dev/null
+'" 2>&1 | tail -3
+ok "code-server 익스텐션 설치 (Python, ESLint, Prettier, GitLens, Dracula 등)"
+
+# code-server 기본 설정 (Dracula 테마, 자동저장, 태블릿 최적화)
+su -c "mkdir -p $LINUX_ROOT/root/.local/share/code-server/User"
+su -c "cat > $LINUX_ROOT/root/.local/share/code-server/User/settings.json << 'SETTINGSEOF'
+{
+    \"workbench.colorTheme\": \"Dracula\",
+    \"workbench.iconTheme\": \"material-icon-theme\",
+    \"editor.fontSize\": 14,
+    \"editor.tabSize\": 2,
+    \"editor.wordWrap\": \"on\",
+    \"editor.minimap.enabled\": false,
+    \"terminal.integrated.fontSize\": 13,
+    \"terminal.integrated.defaultProfile.linux\": \"bash\",
+    \"files.autoSave\": \"afterDelay\",
+    \"files.autoSaveDelay\": 1000,
+    \"python.defaultInterpreterPath\": \"/usr/bin/python3\",
+    \"editor.bracketPairColorization.enabled\": true,
+    \"workbench.startupEditor\": \"none\"
+}
+SETTINGSEOF"
+ok "code-server 설정 (Dracula 테마, 자동저장, 태블릿 최적화)"
+
 echo -e "  ${CYAN}브라우저에서 http://localhost:8080 접속${NC}"
 
 # ============================================================
-# Step 13: chroot 쉘 환경 + CLAUDE.md
+# Step 13: Hacker's Keyboard (PC 레이아웃 키보드)
 # ============================================================
 echo ""
-info "Step 13: chroot 쉘 환경 설정..."
+info "Step 13: Hacker's Keyboard 설치..."
+
+if pm list packages 2>/dev/null | grep -q "org.pocketworkstation.pckeyboard"; then
+  ok "Hacker's Keyboard 이미 설치됨"
+else
+  HK_APK="$PREFIX/tmp/hackerskb.apk"
+  curl -fsSL -L -o "$HK_APK" "https://f-droid.org/repo/org.pocketworkstation.pckeyboard_1041001.apk" 2>/dev/null
+  if [ -f "$HK_APK" ] && [ "$(stat -c%s "$HK_APK" 2>/dev/null || echo 0)" -gt 50000 ]; then
+    su -c "cp $HK_APK /data/local/tmp/hackerskb.apk && chmod 644 /data/local/tmp/hackerskb.apk && pm install -r /data/local/tmp/hackerskb.apk" 2>&1
+    if pm list packages 2>/dev/null | grep -q "org.pocketworkstation.pckeyboard"; then
+      ok "Hacker's Keyboard 설치 완료"
+    else
+      warn "Hacker's Keyboard 설치 실패 — F-Droid에서 수동 설치"
+    fi
+    su -c "rm -f /data/local/tmp/hackerskb.apk"
+    rm -f "$HK_APK"
+  else
+    warn "Hacker's Keyboard 다운로드 실패"
+  fi
+fi
+
+# ============================================================
+# Step 14: chroot 쉘 환경 + CLAUDE.md
+# ============================================================
+echo ""
+info "Step 14: chroot 쉘 환경 설정..."
 
 # chroot .bashrc 설치
 su -c "cat > $LINUX_ROOT/root/.bashrc << 'CHROOTBASHRC'
@@ -556,10 +615,10 @@ su -c "ln -sf /mnt/sdcard/Documents/Brain $LINUX_ROOT/root/vault" 2>/dev/null
 ok "~/vault → Obsidian Brain 링크"
 
 # ============================================================
-# Step 14: Termux .bashrc 설정
+# Step 15: Termux .bashrc 설정
 # ============================================================
 echo ""
-info "Step 14: 쉘 바로가기 설정..."
+info "Step 15: 쉘 바로가기 설정..."
 
 # linux 함수가 이미 있으면 스킵
 if grep -q "function linux\|linux()" ~/.bashrc 2>/dev/null; then

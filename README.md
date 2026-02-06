@@ -13,6 +13,9 @@ Termux에서 `setup.sh` 한 번 실행하면:
 - **한국어 로케일** (ko_KR.UTF-8) + **Asia/Seoul** 타임존
 - **/storage 마운트** (Obsidian vault 등 공유 스토리지 접근)
 - **CLAUDE.md + rules** 자동 복사
+- **code-server** (브라우저 VS Code + 익스텐션 + Dracula 테마)
+- **Fake ADB wrapper** (디바이스 자체 자동화, 코드 수정 불필요)
+- **Hacker's Keyboard** (Ctrl/Alt/Tab/Esc 키 지원)
 
 ## 왜 필요한가?
 
@@ -123,6 +126,9 @@ Termux:
 | Termux:Boot 앱 | `com.termux.boot` | GitHub APK 자동 설치 |
 | Termux:API 앱 | `com.termux.api` | GitHub APK 자동 설치 |
 | Android 명령어 브릿지 | chroot `/usr/local/bin/` | nsenter wrapper (pm, am, settings 등) |
+| Fake ADB wrapper | chroot `/usr/local/bin/adb` | `adb shell` → nsenter 자동 변환 |
+| code-server | chroot 포트 8080 | 브라우저 VS Code + Dracula 테마 + 익스텐션 |
+| Hacker's Keyboard | Android 앱 | Ctrl/Alt/Tab/Esc 키 지원 키보드 |
 | 개발 도구 | chroot apt | git, ripgrep, jq, tmux, htop, build-essential |
 | 로케일/타임존 | chroot 시스템 | ko_KR.UTF-8, Asia/Seoul |
 | /storage 마운트 | chroot `/mnt/sdcard` | Android 공유 스토리지 바인드 마운트 |
