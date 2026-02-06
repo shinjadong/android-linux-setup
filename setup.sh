@@ -237,6 +237,14 @@ if su -c "magisk -v" >/dev/null 2>&1; then
   su -c "cp $SCRIPT_DIR/configs/linux-ssh.sh /data/adb/service.d/linux-ssh.sh && chmod 755 /data/adb/service.d/linux-ssh.sh"
   ok "Magisk service.d/linux-ssh.sh 설치"
 
+  # /tmp 권한 수정 (Claude Code EACCES 해결)
+  su -c "cp $SCRIPT_DIR/configs/fix-tmp.sh /data/adb/service.d/fix-tmp.sh && chmod 755 /data/adb/service.d/fix-tmp.sh"
+  ok "Magisk service.d/fix-tmp.sh 설치 (/tmp SELinux 수정)"
+
+  # 즉시 적용
+  su -c "umount /tmp 2>/dev/null; mount -t tmpfs -o mode=1777 tmpfs /tmp && chcon u:object_r:app_data_file:s0 /tmp && chmod 1777 /tmp" 2>/dev/null
+  ok "/tmp 즉시 수정 적용"
+
   # bt-fix는 선택적
   if [ -f "$SCRIPT_DIR/configs/bt-fix.sh" ]; then
     su -c "cp $SCRIPT_DIR/configs/bt-fix.sh /data/adb/service.d/bt-fix.sh && chmod 755 /data/adb/service.d/bt-fix.sh"

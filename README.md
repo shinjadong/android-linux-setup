@@ -112,6 +112,25 @@ Termux:
 | Termux:API 앱 | `com.termux.api` | GitHub APK 자동 설치 |
 | 배터리/권한 설정 | 시스템 | 배터리 최적화 제외, 백그라운드 허용 |
 
+## /tmp 문제 해결 (핵심)
+
+Claude Code가 Termux에서 `EACCES: permission denied, mkdir '/tmp/claude-*'`로 실패하는 이유:
+
+```
+Android /tmp → SELinux 라벨: shell_data_file
+Termux 프로세스 → SELinux 도메인: untrusted_app_27
+→ SELinux 정책이 untrusted_app의 shell_data_file 쓰기를 차단
+→ chmod 1777로도 해결 불가 (DAC는 통과하지만 MAC에서 차단)
+```
+
+**해결**: `/tmp`을 `app_data_file` 컨텍스트의 tmpfs로 리마운트
+
+```bash
+su -c "umount /tmp; mount -t tmpfs -o mode=1777 tmpfs /tmp; chcon u:object_r:app_data_file:s0 /tmp"
+```
+
+이 스크립트는 `fix-tmp.sh`로 Magisk service.d에 설치되어 재부팅마다 자동 적용됩니다.
+
 ## Termux vs chroot 비교
 
 | 항목 | Termux | chroot (이 프로젝트) |
